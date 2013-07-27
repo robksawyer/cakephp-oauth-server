@@ -1,6 +1,7 @@
 <?php
 
 App::uses('OAuthAppModel', 'OAuth.Model');
+App::uses('OAuthComponent', 'OAuth.Controller/Component');
 App::uses('String', 'Utility');
 App::uses('Security', 'Utility');
 
@@ -119,15 +120,19 @@ class Client extends OAuthAppModel {
 			return false;
 		}
 
-		//You may wish to change this
-		$this->data['Client']['client_id'] = base64_encode(uniqid() . substr(uniqid(), 11, 2));	// e.g. NGYcZDRjODcxYzFkY2Rk (seems popular format)
-		//$this->data['Client']['client_id'] = uniqid();					// e.g. 4f3d4c8602346
-		//$this->data['Client']['client_id'] = str_replace('.', '', uniqid('', true));		// e.g. 4f3d4c860235a529118898
-		//$this->data['Client']['client_id'] = str_replace('-', '', String::uuid());		// e.g. 4f3d4c80cb204b6a8e580a006f97281a
+		/**
+		 * Only create a client id if one isn't passed.
+		 */
+		if(empty($this->data['Client']['client_id'])){
+			//You may wish to change this
+			$this->data['Client']['client_id'] = base64_encode(uniqid() . substr(uniqid(), 11, 2));	// e.g. NGYcZDRjODcxYzFkY2Rk (seems popular format)
+			//$this->data['Client']['client_id'] = uniqid();					// e.g. 4f3d4c8602346
+			//$this->data['Client']['client_id'] = str_replace('.', '', uniqid('', true));		// e.g. 4f3d4c860235a529118898
+			//$this->data['Client']['client_id'] = str_replace('-', '', String::uuid());		// e.g. 4f3d4c80cb204b6a8e580a006f97281a
+		}
 
 		/**
-		 * Add the client to the database if it doesn't already exist. This is the only way that 
-		 * I've found to sync Threescale and the current database. 
+		 * Create a client secret, only if one doesn't already exist.
 		 */
 		if(empty($this->data['Client']['client_secret'])){
 			$this->addClientSecret = $this->newClientSecret();
