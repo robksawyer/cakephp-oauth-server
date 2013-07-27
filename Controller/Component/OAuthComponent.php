@@ -142,7 +142,10 @@ class OAuthComponent extends Component implements IOAuth2Storage, IOAuth2Refresh
  */
 	public function __construct(ComponentCollection $collection, $settings = array()){
 		parent::__construct($collection, $settings);
-		$this->OAuth2 = new OAuth2($this);
+		//$this->OAuth2 = new OAuth2($this);
+		$this->OAuth2 = new OAuth2($this, array(
+			'access_token_lifetime' => 631152000 //20 years (in seconds)
+		));
 		$this->AccessToken = ClassRegistry::init(array('class' => 'OAuth.AccessToken', 'alias' => 'AccessToken'));
 		$this->AuthCode = ClassRegistry::init(array('class' => 'OAuth.AuthCode', 'alias' => 'AuthCode'));
 		$this->Client = ClassRegistry::init(array('class' => 'OAuth.Client', 'alias' => 'Client'));
@@ -400,7 +403,8 @@ class OAuthComponent extends Component implements IOAuth2Storage, IOAuth2Refresh
 	public function checkClientCredentials($client_id, $client_secret = NULL) {
 		$conditions = array('client_id' => $client_id);
 		if ($client_secret) {
-			$conditions['client_secret'] = self::hash($client_secret);
+			//$conditions['client_secret'] = self::hash($client_secret);
+			$conditions['client_secret'] = $client_secret; //@link:https://github.com/thomseddon/cakephp-oauth-server/issues/18
 		}
 		$client = $this->Client->find('first', array(
 			'conditions' => $conditions,

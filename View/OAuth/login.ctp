@@ -13,8 +13,8 @@
 Please login
 
 <?php
-	echo $this->Form->input('email');
-	echo $this->Form->input('password');
+	echo $this->Form->input('User.username');
+	echo $this->Form->input('User.passwd',array('label' => 'Password'));
 
 	echo $this->Form->end('submit');
 
