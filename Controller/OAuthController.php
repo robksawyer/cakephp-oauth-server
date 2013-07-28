@@ -189,7 +189,11 @@ class OAuthController extends OAuthAppController {
  *  
  */
 	public function login () {
-		$OAuthParams = $this->OAuth->getAuthorizeParams();
+		if(!empty($this->params->query['client_id'])){
+			$OAuthParams = $this->OAuth->getAuthorizeParams($this->params->query);
+		}else{
+			$OAuthParams = $this->OAuth->getAuthorizeParams();
+		}
 		if ($this->request->is('post')) {
 			$this->validateRequest();
 
