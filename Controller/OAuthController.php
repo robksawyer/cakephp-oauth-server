@@ -18,7 +18,7 @@ App::uses('OAuthAppController', 'OAuth.Controller');
  */
 class OAuthController extends OAuthAppController {
 	
-	public $components = array('OAuth.OAuth', 'Auth', 'Session', 'Security');
+	public $components = array('OAuth.OAuth', 'Auth', 'Session', 'Security','ThreeScale.ThreeScale');
 
 	public $uses = array('Users');
 
@@ -32,9 +32,96 @@ class OAuthController extends OAuthAppController {
  */
 	public function beforeFilter() {
 		parent::beforeFilter();
-		$this->OAuth->authenticate = array('fields' => array('username' => 'email'));
+		$this->layout = 'default';
+		$this->OAuth->authenticate = array(
+			'fields' => array(
+				'username' => 'username',
+				'password' => 'passwd'
+			)
+		);
 		$this->Auth->allow($this->OAuth->allowedActions);
 		$this->Security->blackHoleCallback = 'blackHole';
+
+		//Only authorize on the following methods
+		if (!$this->request->is('post')) {
+			if(in_array($this->params['action'], array('authorize','login'))){
+				//The following checks to see if the client exists in the database. If not, it's created.
+				if(isset($this->params->query['client_id'])){
+					//Check to make sure that the app is valid. 
+					$response = $this->ThreeScale->Client->oauth_authorize($this->params->query['client_id']);
+					if ($response->isSuccess() === true) {
+						$appDetails = $response->getApplication();
+						$appExtDetails = $this->ThreeScale->Client->application($this->params->query['client_id'],$appDetails['key']); 
+						$appExtDetailsClean = array(
+							'id' => $appExtDetails['id'],
+							'redirect_url' => $appExtDetails['redirect_url'],
+							'description' => $appExtDetails['description'],
+							'extra_fields' => $appExtDetails['extra_fields'],
+							'plan' => $appExtDetails['plan'],
+							'name' => $appExtDetails['name'],
+							'state' => $appExtDetails['state']
+						);
+						unset($appExtDetails);
+						$this->Session->write('OAuthApp.details', $appExtDetailsClean);
+						unset($appExtDetailsClean);
+
+						//Check to see if the client already exists in the database.
+						$client = $this->OAuth->Client->find('count',array('conditions' => array('Client.client_id' => $this->params->query['client_id'])));
+						if($client > 0){
+							//The client exists. Let's update it with the latest 3scale information
+							$success = $this->OAuth->Client->update(array(
+								'Client' => array(
+									'client_id' => $this->params->query['client_id'],
+									'client_secret' => $appDetails['key'],
+									'redirect_uri' => $appDetails['redirect_url']
+								)));
+						}else{
+							//Add the client
+							$success = $this->OAuth->Client->add(array(
+								'Client' => array(
+									'client_id' => $this->params->query['client_id'],
+									'client_secret' => $appDetails['key'],
+									'redirect_uri' => $appDetails['redirect_url']
+								)));
+						}
+
+						//Add the redirect_uri
+						$this->params->query['redirect_uri'] = $appDetails['redirect_url'];
+
+						/*
+						$usageReports = $response->getUsageReports();
+						if(!empty($usageReports)){
+							$usageReport  = $usageReports[0];
+							if($usageReport->isExceeded()){
+								$error = array(
+									'code' => '300',
+									'message' => 'Rate limit exceeded.'
+								);
+								$this->set(array(
+									'error' => $error,
+									'_serialize' => 'error'
+								));
+							}
+						}*/
+					} else {
+						// Something's wrong with this app.
+						$meta = array(
+							'code' => 401,
+							'message' => 'Unauthorized'
+						);
+						$notifications = array();
+						$response = array(
+							'error_type' => $response->getErrorCode(),
+							'error_description' => $response->getErrorMessage()
+						);
+						$this->set(compact('meta','notifications','response'));
+						return array(
+							'_serialize' => array('meta','notifications','response')
+						);
+					}
+				}
+			}
+		}
 	}
 
 /**
@@ -53,12 +140,11 @@ class OAuthController extends OAuthAppController {
 		if (!$this->Auth->loggedIn()) {
 			$this->redirect(array('action' => 'login', '?' => $this->request->query));
 		}
-		
+
 		if ($this->request->is('post')) {
 			$this->validateRequest();
 
 			$userId = $this->Auth->user('id');
-
 			if ($this->Session->check('OAuth.logout')) {
 				$this->Auth->logout();
 				$this->Session->delete('OAuth.logout');
@@ -86,7 +172,13 @@ class OAuthController extends OAuthAppController {
 				$e->sendHttpResponse();
 			}
 		}
-		$this->set(compact('OAuthParams'));
+		if ($this->Session->check('OAuthApp.details')) {
+				$OAuthAppDetails = $this->Session->read('OAuthApp.details');
+				$this->Session->delete('OAuthApp.details');
+		}else{
+			$OAuthAppDetails = array();
+		}
+		$this->set(compact('OAuthParams','OAuthAppDetails'));
 	}
 
 /**
@@ -101,23 +193,52 @@ class OAuthController extends OAuthAppController {
 		if ($this->request->is('post')) {
 			$this->validateRequest();
 
+			$loginData = array('User' => array(
+					'username' => $this->request->data['User']['username'],
+					'passwd' => $this->request->data['User']['passwd']
+				));
 			//Attempted login
-			if ($this->Auth->login()) {
+			if ($this->Auth->login($loginData['User'])) {
+				unset($loginData);
+				$userData = $this->User->find('first',array(
+					'conditions' => array(
+						'User.username' => $this->request->data['User']['username']
+					),
+					'fields' => array('username','name','id','banned','active','role','private'),
+					'recursive' => -1
+				));
+				$this->Session->write('Auth.User',$userData['User']); //Update the session
+
 				//Write this to session so we can log them out after authenticating
 				$this->Session->write('OAuth.logout', true);
-				
+
 				//Write the auth params to the session for later
 				$this->Session->write('OAuth.params', $OAuthParams);
-				
+
 				//Off we go
-				$this->redirect(array('action' => 'authorize'));
+				return $this->redirect(array('action' => 'authorize'));
 			} else {
 				$this->Session->setFlash(__('Username or password is incorrect'), 'default', array(), 'auth');
 			}
 		}
-		$this->set(compact('OAuthParams'));
+		$appName = $this->applicationDetails['name'];
+		$this->set(compact('OAuthParams','appName'));
 	}
 
+/**
+ * getUser method
+ * Returns the current user's details.
+ * @return array
+ */
+	private function getUser($request) {
+		$username = env('PHP_AUTH_USER');
+		$pass = env('PHP_AUTH_PW');
+
+		if (empty($username) || empty($pass)) {
+			return false;
+		}
+		return $this->_findUser($username, $pass);
+	}
 
 /**
  * Example Token Endpoint - this is where clients can retrieve an access token
@@ -151,7 +272,7 @@ class OAuthController extends OAuthAppController {
 	}
 	
 /**
- * Quick and dirty example implementation for protecetd resource
+ * Quick and dirty example implementation for protected resource
  * 
  * User accesible via $this->OAuth->user();
  * Single fields avaliable via $this->OAuth->user("id"); 
