@@ -138,7 +138,7 @@ class OAuthController extends OAuthAppController {
 	public function authorize () {
 
 		if (!$this->Auth->loggedIn()) {
-			$this->redirect(array('action' => 'login', '?' => $this->request->query));
+			return $this->redirect(array('action' => 'login', '?' => $this->request->query));
 		}
 
 		if ($this->request->is('post')) {
