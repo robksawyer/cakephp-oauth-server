@@ -20,7 +20,7 @@ class OAuthController extends OAuthAppController {
 	
 	public $components = array('OAuth.OAuth', 'Auth', 'Session', 'Security','ThreeScale.ThreeScale');
 
-	public $uses = array('Users');
+	public $uses = array('User');
 
 	public $helpers = array('Form');
 	
