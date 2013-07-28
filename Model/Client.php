@@ -101,6 +101,46 @@ class Client extends OAuthAppModel {
 		)
 	);
 
+
+/**
+ * UpdateClient
+ * 
+ * Convinience function for updating a client
+ * 
+ * @param mixed $data Either an array (e.g. $controller->request->data) or string redirect_uri
+ * @return booleen Success of failure
+ */
+	public function update($data = null) {
+		$this->data['Client'] = array();
+
+
+		//Set the client id
+		if (is_array($data) && is_array($data['Client']) && array_key_exists('client_id', $data['Client'])) {
+			$this->data['Client']['client_id'] = $data['Client']['client_id'];
+		}else{
+			return false;
+		}
+
+		$this->read(null, $this->data['Client']['client_id']);
+
+		//Set the client secret
+		if (is_array($data) && is_array($data['Client']) && array_key_exists('client_secret', $data['Client'])) {
+			$this->data['Client']['client_secret'] = $data['Client']['client_secret'];
+		}else{
+			return false;
+		}
+
+		if (is_array($data) && is_array($data['Client']) && array_key_exists('redirect_uri', $data['Client'])) {
+			$this->data['Client']['redirect_uri'] = $data['Client']['redirect_uri'];
+		} elseif (is_string($data)){
+			$this->data['Client']['redirect_uri'] = $data;
+		} else {
+			return false;
+		}
+
+		return $this->save($this->data);
+	}
+	
 /**
  * AddClient
  * 
